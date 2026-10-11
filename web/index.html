@@ -116,6 +116,17 @@ a{color:var(--accent)}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:0 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center}
 .sheet-card{width:100%;max-width:520px;background:var(--bg);border:1px solid var(--rule);border-radius:14px;padding:16px 18px;display:grid;gap:8px;box-shadow:0 12px 40px #0000002e;font-size:14px}
 .sheet-card b{font-weight:600}
+.barrow[data-catdetail]{cursor:pointer;border-radius:6px;margin:-4px -6px;padding:4px 6px}
+.barrow[data-catdetail]:hover{background:var(--surface)}
+.barrow[data-catdetail]:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.modal{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:16px;background:#00000059}
+.modal[hidden]{display:none}
+.modal-card{width:100%;max-width:560px;max-height:min(80vh,720px);display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--rule);border-radius:14px;box-shadow:0 12px 40px #0000003a}
+.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 18px 12px;border-bottom:1px solid var(--rule)}
+.modal-title{font-size:16px;font-weight:500;display:flex;align-items:center;gap:8px}
+.modal-head .btn{padding:4px 10px}
+.modal-body{overflow-y:auto;overscroll-behavior:contain;padding:2px 18px 16px}
+@media (max-width:520px){.modal{align-items:flex-end;padding:0}.modal-card{max-width:none;max-height:85vh;border-radius:14px 14px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}}
 @media (max-width:520px){.hero{font-size:32px}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpis .kpi:last-child{grid-column:1/-1}.barrow{grid-template-columns:6.2em 1fr 5.6em}}
 @media (prefers-reduced-motion:no-preference){.fill{transition:width .4s ease}}
 </style>
@@ -169,7 +180,7 @@ a{color:var(--accent)}
     </div>
     <div class="label" id="trendLabel">每日消费</div>
     <div class="chart" id="trend"></div>
-    <div class="label" data-ic="pie">分类</div>
+    <div class="label" data-ic="pie">分类 · 点一行看每一笔</div>
     <div class="bars" id="catBars"></div>
     <div class="label" data-ic="card">按卡</div>
     <div class="bars" id="cardBars"></div>
@@ -198,6 +209,7 @@ a{color:var(--accent)}
 </div>
 
 <div id="sheet" class="sheet" hidden></div>
+<div id="detail" class="modal" hidden></div>
 <script>
 const ERA = "Era Context";
 const T_TX = "transactions__list_transactions";
@@ -537,10 +549,10 @@ function barChart(el, series, isWeek){
   });
   svg.addEventListener("pointerleave", () => tip.hidden = true);
 }
-function barRows(el, entries, total, labelOf, iconOf){
+function barRows(el, entries, total, labelOf, iconOf, detail){
   if (!entries.length){ el.innerHTML = '<div class="empty">这期没有消费。</div>'; return; }
   const max = Math.max(...entries.map(e=>e[1]));
-  el.innerHTML = entries.map(([k,v]) => `<div class="barrow"><span>${iconOf?iconOf(k):""}${esc(labelOf(k))}</span><div class="track"><div class="fill" style="width:${Math.max(0,v/max*100).toFixed(1)}%"></div></div><span class="v num">${fmt(v)}<span class="pct">${total>0?Math.round(v/total*100)+"%":""}</span></span></div>`).join("");
+  el.innerHTML = entries.map(([k,v]) => `<div class="barrow"${detail ? ` role="button" tabindex="0" data-catdetail="${esc(k)}" aria-label="查看${esc(labelOf(k))}的每一笔"` : ""}><span>${iconOf?iconOf(k):""}${esc(labelOf(k))}</span><div class="track"><div class="fill" style="width:${Math.max(0,v/max*100).toFixed(1)}%"></div></div><span class="v num">${fmt(v)}<span class="pct">${total>0?Math.round(v/total*100)+"%":""}</span></span></div>`).join("");
 }
 function renderReport(){
   const P = period(), st = stats(P);
@@ -554,7 +566,7 @@ function renderReport(){
   $("kDelta").innerHTML = st.prevTotal>0 ? `<span class="delta ${dl>0?"up":"down"}">${dl>0?"+":""}${pct}%</span>` : "—";
   $("trendLabel").textContent = S.kind==="week" ? "每日消费" : "每日消费（本月）";
   barChart($("trend"), st.series, S.kind==="week");
-  barRows($("catBars"), st.byCat, st.total, k=>CAT_LABEL[k]||k, catIcon);
+  barRows($("catBars"), st.byCat, st.total, k=>CAT_LABEL[k]||k, catIcon, true);
   barRows($("cardBars"), st.byCard, st.total, k=>cardName(k), acctIcon);
   const inc = inRange(S.income, P.a, P.b);
   $("incLabel").innerHTML = ic("income") + `收入 · 进 checking 和储蓄的钱，不含券商和自己账户之间的转账${inc.length ? " · 共 " + fmt2(sum(inc)) : ""}`;
@@ -696,8 +708,28 @@ function askScope(id, v){
   sh.hidden = false;
   $("scopeAll").focus();
 }
+// Report → category row → every transaction in that category for the period shown.
+function showCatDetail(k){
+  const P = period();
+  const rows = inRange(S.tx, P.a, P.b).filter(t => categorize(t) === k).sort((a,b)=> b.date.localeCompare(a.date) || b.amt-a.amt);
+  const m = $("detail");
+  m.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <div class="modal-head"><div><div class="modal-title" id="detailTitle">${catIcon(k)}${esc(CAT_LABEL[k]||k)}</div>
+      <div class="muted">${esc(P.label)} · ${rows.length} 笔 · 共 <span class="num">${fmt2(sum(rows))}</span></div></div>
+      <button class="btn" id="detailClose" aria-label="关闭">✕</button></div>
+    <div class="modal-body">${rows.length ? rows.map(t => `<div class="li"><span>${esc(t.merchant)} <span class="muted">${t.date.slice(5)} · ${esc(cardName(t.mask))}${t.pending?" · 待入账":""}${t.amt<0?" · 退款":""}</span></span><span class="num"${t.amt<0?' style="color:var(--good)"':""}>${t.amt<0?"+"+fmt2(-t.amt):fmt2(t.amt)}</span></div>`).join("") : '<div class="empty">这一期没有这个分类的交易。</div>'}</div></div>`;
+  m.hidden = false;
+  document.body.style.overflow = "hidden";
+  $("detailClose").focus();
+}
+function closeDetail(){ $("detail").hidden = true; document.body.style.overflow = ""; }
 function closeSheet(){ $("sheet").hidden = true; S.pending = null; renderTx(); }
-document.addEventListener("keydown", e => { if (e.key === "Escape" && S.pending) closeSheet(); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !$("detail").hidden) { closeDetail(); return; }
+  if (e.key === "Escape" && S.pending) closeSheet();
+  const cd = e.target.closest && e.target.closest("[data-catdetail]");
+  if (cd && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); showCatDetail(cd.dataset.catdetail); }
+});
 
 /* ---------- wiring ---------- */
 function renderAll(){ renderHeader(); renderChips(); renderTx(); renderReport(); }
@@ -708,6 +740,8 @@ function setTab(t){
   try { localStorage.setItem("fa.tab", t); } catch {}
 }
 document.addEventListener("click", e => {
+  if (e.target.id === "detail") { closeDetail(); return; }   // backdrop
+  const cd = e.target.closest("[data-catdetail]"); if (cd) { showCatDetail(cd.dataset.catdetail); return; }
   const b = e.target.closest("button, a"); if (!b) return;
   if (b.dataset.tab) setTab(b.dataset.tab);
   else if (b.dataset.card) { S.card = b.dataset.card; renderChips(); renderTx(); }
@@ -718,6 +752,7 @@ document.addEventListener("click", e => {
   else if (b.id === "prevP") { S.offset--; renderReport(); }
   else if (b.id === "nextP") { if (S.offset < 0) { S.offset++; renderReport(); } }
   else if (b.id === "moreBtn") loadMore();
+  else if (b.id === "detailClose") closeDetail();
   else if (b.id === "scopeCancel") closeSheet();
   else if (b.id === "scopeOne") { const p = S.pending; closeSheet(); setOne(p.id, p.v); }
   else if (b.id === "scopeAll") { const p = S.pending; closeSheet(); setAll(p.merchant, p.v); }

@@ -231,11 +231,19 @@ app.post("/api/advice", async (req, res) => {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 1500, messages: [{ role: "user", content: String(req.body.prompt || "") }] })
+      // Current models think before answering and thinking counts toward max_tokens, so leave
+      // plenty of room; low effort is enough for a few lines of advice.
+      body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 16000, output_config: { effort: "low" }, messages: [{ role: "user", content: String(req.body.prompt || "") }] })
     });
     const j = await r.json();
     if (!r.ok) return res.status(502).json({ code: r.status === 429 ? "rate_limited" : "upstream_error", message: j.error?.message || r.statusText });
-    res.json({ text: (j.content || []).filter(b => b.type === "text").map(b => b.text).join("") });
+    const text = (j.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+    // Don't hand back a cut-off or empty answer; the page would save it as this period's advice.
+    if (j.stop_reason !== "end_turn" || !text.trim()) {
+      console.error("[advice] stop_reason", j.stop_reason, "text length", text.length);
+      return res.status(502).json({ code: "upstream_error", message: `stop_reason ${j.stop_reason}` });
+    }
+    res.json({ text });
   } catch (e) { res.status(502).json({ code: "upstream_error", message: e.message }); }
 });
 
