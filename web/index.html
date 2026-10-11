@@ -113,7 +113,7 @@ select.catsel{font:inherit;font-size:12px;color:var(--ink);background:var(--bg);
 .offer .cav{margin-top:4px;font-size:12px;color:var(--ink-3);max-width:65ch}
 .empty{color:var(--ink-3);padding:24px 0;font-size:13px}
 a{color:var(--accent)}
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:0 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:40;padding:0 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center}
 .sheet-card{width:100%;max-width:520px;background:var(--bg);border:1px solid var(--rule);border-radius:14px;padding:16px 18px;display:grid;gap:8px;box-shadow:0 12px 40px #0000002e;font-size:14px}
 .sheet-card b{font-weight:600}
 .barrow[data-catdetail]{cursor:pointer;border-radius:6px;margin:-4px -6px;padding:4px 6px}
@@ -126,6 +126,11 @@ a{color:var(--accent)}
 .modal-title{font-size:16px;font-weight:500;display:flex;align-items:center;gap:8px}
 .modal-head .btn{padding:4px 10px}
 .modal-body{overflow-y:auto;overscroll-behavior:contain;padding:2px 18px 16px}
+.li-btn{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:13px}
+.li-btn > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.li-btn:hover{background:var(--surface)} .li-btn:focus-visible{outline:2px solid var(--accent)}
+.li-btn[aria-expanded="true"]{border-bottom-color:transparent}
+.recat{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 12px;border-bottom:1px solid var(--rule)}
 @media (max-width:520px){.modal{align-items:flex-end;padding:0}.modal-card{max-width:none;max-height:85vh;border-radius:14px 14px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}}
 @media (max-width:520px){.hero{font-size:32px}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpis .kpi:last-child{grid-column:1/-1}.barrow{grid-template-columns:6.2em 1fr 5.6em}}
 @media (prefers-reduced-motion:no-preference){.fill{transition:width .4s ease}}
@@ -236,7 +241,7 @@ const CAT_KEYS = [...CATS.map(c=>c[0]),"other"];
 const S = {
   accounts:[], tx:[], payments:[], income:[], loadedFrom:null, overrides:{}, merchantRules:{}, pending:null, perks:[], perkUse:{}, offers:[], offersMeta:null, reports:{},
   tab:"spend", card:"all", cat:"all", q:"", kind:"week", offset:0, offerFit:"all",
-  mcp:null, db:null, sample:null, editing:null
+  mcp:null, db:null, sample:null, editing:null, detailCat:null, detailEdit:null
 };
 
 /* ---------- helpers ---------- */
@@ -709,7 +714,9 @@ function askScope(id, v){
   $("scopeAll").focus();
 }
 // Report → category row → every transaction in that category for the period shown.
-function showCatDetail(k){
+function showCatDetail(k, keepScroll){
+  S.detailCat = k;
+  const prevBody = $("detail").querySelector(".modal-body"), scroll = keepScroll && prevBody ? prevBody.scrollTop : 0;
   const P = period();
   const rows = inRange(S.tx, P.a, P.b).filter(t => categorize(t) === k).sort((a,b)=> b.date.localeCompare(a.date) || b.amt-a.amt);
   const m = $("detail");
@@ -717,22 +724,27 @@ function showCatDetail(k){
     <div class="modal-head"><div><div class="modal-title" id="detailTitle">${catIcon(k)}${esc(CAT_LABEL[k]||k)}</div>
       <div class="muted">${esc(P.label)} · ${rows.length} 笔 · 共 <span class="num">${fmt2(sum(rows))}</span></div></div>
       <button class="btn" id="detailClose" aria-label="关闭">✕</button></div>
-    <div class="modal-body">${rows.length ? rows.map(t => `<div class="li"><span>${esc(t.merchant)} <span class="muted">${t.date.slice(5)} · ${esc(cardName(t.mask))}${t.pending?" · 待入账":""}${t.amt<0?" · 退款":""}</span></span><span class="num"${t.amt<0?' style="color:var(--good)"':""}>${t.amt<0?"+"+fmt2(-t.amt):fmt2(t.amt)}</span></div>`).join("") : '<div class="empty">这一期没有这个分类的交易。</div>'}</div></div>`;
+    <div class="modal-body">${rows.length ? '<div class="muted" style="padding:8px 0 2px">点一笔可以改分类</div>' : ""}${rows.length ? rows.map(t => {
+      const open = S.detailEdit === t.id;
+      return `<button class="li-btn" data-detailtx="${esc(t.id)}" aria-expanded="${open}"><span>${esc(t.merchant)} <span class="muted">${t.date.slice(5)} · ${esc(cardName(t.mask))}${t.pending?" · 待入账":""}${t.amt<0?" · 退款":""}</span></span><span class="num"${t.amt<0?' style="color:var(--good)"':""}>${t.amt<0?"+"+fmt2(-t.amt):fmt2(t.amt)}</span></button>`
+        + (open ? `<div class="recat" role="group" aria-label="改成哪个分类">${CAT_KEYS.map(c => `<button class="chip" data-recat="${c}" data-tx="${esc(t.id)}" aria-pressed="${c===k}">${catIcon(c)}${esc(CAT_LABEL[c])}</button>`).join("")}</div>` : "");
+    }).join("") : '<div class="empty">这一期没有这个分类的交易。</div>'}</div></div>`;
   m.hidden = false;
   document.body.style.overflow = "hidden";
-  $("detailClose").focus();
+  const body = m.querySelector(".modal-body"); if (body) body.scrollTop = scroll;
+  if (!keepScroll) $("detailClose").focus();
 }
-function closeDetail(){ $("detail").hidden = true; document.body.style.overflow = ""; }
+function closeDetail(){ $("detail").hidden = true; S.detailEdit = null; document.body.style.overflow = ""; }
 function closeSheet(){ $("sheet").hidden = true; S.pending = null; renderTx(); }
 document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && S.pending) { closeSheet(); return; }
   if (e.key === "Escape" && !$("detail").hidden) { closeDetail(); return; }
-  if (e.key === "Escape" && S.pending) closeSheet();
   const cd = e.target.closest && e.target.closest("[data-catdetail]");
   if (cd && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); showCatDetail(cd.dataset.catdetail); }
 });
 
 /* ---------- wiring ---------- */
-function renderAll(){ renderHeader(); renderChips(); renderTx(); renderReport(); }
+function renderAll(){ renderHeader(); renderChips(); renderTx(); renderReport(); if (!$("detail").hidden) showCatDetail(S.detailCat, true); }
 function setTab(t){
   S.tab = t;
   document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab===t));
@@ -753,6 +765,8 @@ document.addEventListener("click", e => {
   else if (b.id === "nextP") { if (S.offset < 0) { S.offset++; renderReport(); } }
   else if (b.id === "moreBtn") loadMore();
   else if (b.id === "detailClose") closeDetail();
+  else if (b.dataset.detailtx) { S.detailEdit = S.detailEdit === b.dataset.detailtx ? null : b.dataset.detailtx; showCatDetail(S.detailCat, true); }
+  else if (b.dataset.recat) { const id = b.dataset.tx, v = b.dataset.recat; S.detailEdit = null; if (v === S.detailCat) showCatDetail(S.detailCat, true); else askScope(id, v); }
   else if (b.id === "scopeCancel") closeSheet();
   else if (b.id === "scopeOne") { const p = S.pending; closeSheet(); setOne(p.id, p.v); }
   else if (b.id === "scopeAll") { const p = S.pending; closeSheet(); setAll(p.merchant, p.v); }
