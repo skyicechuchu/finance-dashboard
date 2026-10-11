@@ -126,7 +126,7 @@ async function sync({ full = false } = {}) {
   syncing = (async () => {
     const accounts = (await callEra("list_financial_accounts", {})).accounts || [];
     kvSet("accounts", accounts);
-    const cards = new Set(accounts.filter(a => a.type === "CreditCard" || a.type === "Checking").map(a => a.account_group_key));
+    const cards = new Set(accounts.filter(a => a.type === "CreditCard" || a.type === "Checking" || a.type === "Savings").map(a => a.account_group_key));
     const last = kvGet("last_sync");
     // A newly tracked account (e.g. checking added later) needs its full history once.
     const known = new Set(kvGet("synced_accounts") || []);
@@ -146,7 +146,7 @@ async function sync({ full = false } = {}) {
     db.prepare("DELETE FROM tx WHERE date < ? AND json_extract(raw,'$.is_pending') = 1").run(iso(new Date(Date.now() - 8 * 864e5)));
     kvSet("last_sync", new Date().toISOString());
     kvSet("synced_accounts", [...cards]);
-    console.log(`[sync] ${n} card/checking transactions since ${from}`);
+    console.log(`[sync] ${n} card/bank transactions since ${from}`);
   })().finally(() => { syncing = null; });
   return syncing;
 }
