@@ -1,0 +1,624 @@
+<title>金融小助手</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow column (max 760px), text tabs, hairline rules, numbers carry the weight. */
+:root{
+  --bg:#fcfcfb; --surface:#f4f4f2; --ink:#111214; --ink-2:#55575c; --ink-3:#8b8d92;
+  --rule:#e6e6e3; --accent:#2a78d6; --accent-soft:#2a78d61f; --bar:#2a78d6; --bar-dim:#c9d9ee;
+  --bad:#c4352b; --bad-soft:#c4352b14; --good:#1d7f4e;
+  --sans:"Geist","PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141516; --surface:#1d1e20; --ink:#eeeeec; --ink-2:#b4b5b8; --ink-3:#7c7e83;
+  --rule:#2a2b2e; --accent:#3987e5; --accent-soft:#3987e526; --bar:#3987e5; --bar-dim:#2b3b52;
+  --bad:#ef6a5e; --bad-soft:#ef6a5e1a; --good:#4cc38a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141516; --surface:#1d1e20; --ink:#eeeeec; --ink-2:#b4b5b8; --ink-3:#7c7e83;
+  --rule:#2a2b2e; --accent:#3987e5; --accent-soft:#3987e526; --bar:#3987e5; --bar-dim:#2b3b52;
+  --bad:#ef6a5e; --bad-soft:#ef6a5e1a; --good:#4cc38a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding-inline:20px;padding-block:28px 64px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
+.brand{font-size:13px;color:var(--ink-3);letter-spacing:.04em}
+.hero{font-size:40px;font-weight:500;line-height:1.1;margin-top:6px}
+.hero-sub{color:var(--ink-2);font-size:13px;margin-top:4px}
+.hstats{display:flex;gap:28px}
+.hstat .k{font-size:12px;color:var(--ink-3)} .hstat .v{font-size:17px;font-weight:500}
+nav{display:flex;gap:24px;margin-top:28px;border-bottom:1px solid var(--rule);position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5;overflow-x:auto}
+nav button{all:unset;cursor:pointer;padding:12px 0;color:var(--ink-3);font-size:14px;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+nav button[aria-selected="true"]{color:var(--ink);border-color:var(--ink)}
+nav button:focus-visible,.chip:focus-visible,.btn:focus-visible,.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+section{padding-top:24px}
+.banner{border:1px solid var(--rule);border-radius:10px;padding:14px 16px;color:var(--ink-2);margin-top:20px;font-size:13px}
+.banner.bad{border-color:var(--bad);color:var(--bad);background:var(--bad-soft)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{all:unset;cursor:pointer;font-size:12.5px;padding:4px 10px;border-radius:999px;border:1px solid var(--rule);color:var(--ink-2);white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.search{flex:1 1 180px;min-width:0;font:inherit;color:var(--ink);background:transparent;border:1px solid var(--rule);border-radius:8px;padding:7px 10px}
+.label{font-size:12px;color:var(--ink-3);letter-spacing:.04em;margin:28px 0 10px}
+.day{margin-top:18px}
+.dayh{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3);padding-bottom:6px;border-bottom:1px solid var(--rule)}
+.tx{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:10px 0;border-bottom:1px solid var(--rule)}
+.tx .m{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tx .a{text-align:right}
+.tx .meta{grid-column:1/-1;display:flex;gap:10px;font-size:12px;color:var(--ink-3);align-items:center}
+.tx.big .a{color:var(--bad)}
+.tx.refund .a{color:var(--good)}
+.cat{all:unset;cursor:pointer;color:var(--ink-2);border-bottom:1px dotted var(--ink-3)}
+.cat:focus-visible{outline:2px solid var(--accent)}
+select.catsel{font:inherit;font-size:12px;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:6px;padding:1px 4px}
+.btn{all:unset;cursor:pointer;font-size:13px;padding:7px 14px;border-radius:8px;border:1px solid var(--rule);color:var(--ink)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn[disabled]{opacity:.5;cursor:default}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.seg button{all:unset;cursor:pointer;padding:6px 14px;font-size:13px;color:var(--ink-2)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink)}
+.period{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pnav{display:flex;align-items:center;gap:6px}
+.pnav .btn{padding:5px 10px}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:22px}
+.kpi .k{font-size:12px;color:var(--ink-3)} .kpi .v{font-size:24px;font-weight:500;margin-top:2px}
+.delta.up{color:var(--bad)} .delta.down{color:var(--good)}
+.chart{position:relative;margin-top:8px}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart text{fill:var(--ink-3);font-family:var(--mono);font-size:10px}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:4px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-110%)}
+.bars{display:grid;gap:10px}
+.barrow{display:grid;grid-template-columns:5.5em 1fr 6.5em;gap:12px;align-items:center;font-size:13px}
+.barrow .track{height:6px;background:var(--surface);border-radius:3px;overflow:hidden}
+.barrow .fill{height:100%;background:var(--bar);border-radius:3px}
+.barrow .v{text-align:right}
+.barrow .pct{color:var(--ink-3);font-size:11px;margin-left:4px}
+.list{display:grid}
+.li{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:13px}
+.li > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.advice{background:var(--surface);border-radius:12px;padding:18px 20px;margin-top:4px}
+.advice p{margin:0 0 10px;max-width:65ch} .advice p:last-child{margin:0}
+.advice b{font-weight:600}
+.muted{color:var(--ink-3);font-size:12px}
+.card{padding:18px 0;border-bottom:1px solid var(--rule)}
+.card h3{margin:0;font-size:16px;font-weight:500;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.card h3 .num{font-size:12px;color:var(--ink-3);font-weight:400}
+.earn{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:13px;color:var(--ink-2)}
+.earn b{color:var(--ink);font-family:var(--mono);font-weight:500}
+.credit{display:flex;gap:10px;align-items:flex-start;padding:6px 0;font-size:13px}
+.credit input{margin-top:3px;accent-color:var(--accent)}
+.credit .when{font-size:11px;color:var(--ink-3);border:1px solid var(--rule);border-radius:4px;padding:0 5px;white-space:nowrap}
+.credit.done span.t{color:var(--ink-3);text-decoration:line-through}
+.tag{font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--rule);color:var(--ink-2);white-space:nowrap}
+.tag.go{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.tag.no{color:var(--ink-3)}
+.best{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px 24px}
+.best .li b{font-weight:500}
+.offer{padding:16px 0;border-bottom:1px solid var(--rule)}
+.offer .top{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+.offer .name{font-size:15px;font-weight:500}
+.offer .facts{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12.5px;color:var(--ink-2);margin-top:4px}
+.offer .why{margin-top:6px;font-size:13px;max-width:65ch}
+.offer .cav{margin-top:4px;font-size:12px;color:var(--ink-3);max-width:65ch}
+.empty{color:var(--ink-3);padding:24px 0;font-size:13px}
+a{color:var(--accent)}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:0 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center}
+.sheet-card{width:100%;max-width:520px;background:var(--bg);border:1px solid var(--rule);border-radius:14px;padding:16px 18px;display:grid;gap:8px;box-shadow:0 12px 40px #0000002e;font-size:14px}
+.sheet-card b{font-weight:600}
+@media (max-width:520px){.hero{font-size:32px}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpis .kpi:last-child{grid-column:1/-1}.barrow{grid-template-columns:4.8em 1fr 5.6em}}
+@media (prefers-reduced-motion:no-preference){.fill{transition:width .4s ease}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="brand">金融小助手 · 本月信用卡消费</div>
+      <div class="hero num" id="heroTotal">—</div>
+      <div class="hero-sub" id="heroSub">正在连接 Era Context…</div>
+    </div>
+    <div class="hstats">
+      <div class="hstat"><div class="k">本周</div><div class="v num" id="hsWeek">—</div></div>
+      <div class="hstat"><div class="k">信用卡欠款</div><div class="v num" id="hsBal">—</div></div>
+    </div>
+  </header>
+  <div id="banner" hidden></div>
+
+  <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="spend" aria-selected="true">消费</button>
+    <button role="tab" data-tab="report" aria-selected="false">报告</button>
+    <button role="tab" data-tab="perks" aria-selected="false">卡片福利</button>
+    <button role="tab" data-tab="offers" aria-selected="false">新卡机会</button>
+  </nav>
+
+  <section id="tab-spend" role="tabpanel">
+    <div class="row" id="cardChips"></div>
+    <div class="row" style="margin-top:10px"><input class="search" id="q" type="search" placeholder="搜索商户" aria-label="搜索商户"></div>
+    <div class="row" id="catChips" style="margin-top:10px"></div>
+    <div id="txList"><div class="empty">正在读取交易…</div></div>
+    <div class="row" style="margin-top:20px;justify-content:center"><button class="btn" id="moreBtn" hidden>加载更早的交易</button></div>
+  </section>
+
+  <section id="tab-report" role="tabpanel" hidden>
+    <div class="period">
+      <div class="seg" role="group" aria-label="报告周期">
+        <button data-kind="week" aria-pressed="true">每周</button>
+        <button data-kind="month" aria-pressed="false">每月</button>
+      </div>
+      <div class="pnav">
+        <button class="btn" id="prevP" aria-label="上一期">‹</button>
+        <span id="pLabel" class="num" style="min-width:9em;text-align:center">—</span>
+        <button class="btn" id="nextP" aria-label="下一期">›</button>
+      </div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="k">总消费</div><div class="v num" id="kTotal">—</div></div>
+      <div class="kpi"><div class="k" id="kPrevLabel">比上期</div><div class="v num" id="kDelta">—</div></div>
+      <div class="kpi"><div class="k">笔数</div><div class="v num" id="kCount">—</div></div>
+    </div>
+    <div class="label" id="trendLabel">每日消费</div>
+    <div class="chart" id="trend"></div>
+    <div class="label">分类</div>
+    <div class="bars" id="catBars"></div>
+    <div class="label">按卡</div>
+    <div class="bars" id="cardBars"></div>
+    <div class="label">最大的几笔</div>
+    <div class="list" id="bigList"></div>
+    <div class="label">理财建议</div>
+    <div id="adviceBox"></div>
+  </section>
+
+  <section id="tab-perks" role="tabpanel" hidden>
+    <div class="label" style="margin-top:0">该刷哪张卡</div>
+    <div class="best" id="bestCard"></div>
+    <div class="label">每张卡的福利 · 勾选表示本期已用</div>
+    <div id="perkList"><div class="empty">正在读取福利数据…</div></div>
+  </section>
+
+  <section id="tab-offers" role="tabpanel" hidden>
+    <div id="offerHead" class="muted"></div>
+    <div class="row" id="offerChips" style="margin-top:12px"></div>
+    <div id="offerList"><div class="empty">正在读取新卡数据…</div></div>
+  </section>
+</div>
+
+<div id="sheet" class="sheet" hidden></div>
+<script>
+const ERA = "Era Context";
+const T_TX = "transactions__list_transactions";
+const T_ACC = "accounts__list_financial_accounts";
+const HISTORY_START = "2026-04-01";
+
+const CARD_NAMES = {"0023":"Smartly","4920":"Sapphire Preferred","6875":"Freedom","5427":"Prime Visa","7702":"Atmos Ascent","7425":"Marriott Boundless","6767":"World of Hyatt","7552":"Chase 7552"};
+
+const CATS = [
+  ["travel","旅行",/airbnb|alaska air|airline|hotel|marriott|hyatt|hilton|rent-a-car|alamo|hertz|enterprise rent|avis|expedia|delta air|united air|southwest|hawaiian air|vrbo|booking\.com/i],
+  ["fun","娱乐门票",/ticketmaster|cinemark|amc |pcc tickets|kualoa|waimea|hanauma|recreation\.gov|fun station|museum|dive oahu|stubhub|eventbrite/i],
+  ["sub","订阅",/apple\.com\/bill|substack|anthropic|openai|netflix|spotify|youtube|x corp|twitter|lemonade|hulu|disney|icloud|google \*/i],
+  ["fee","年费利息",/annual (membership )?fee|interest charge|late fee|foreign transaction/i],
+  ["gas","交通加油",/costco gas|chevron|shell|arco|exxon|\b76\b|parking|parklinq|lyft|uber(?! eats)|toll|ehawaii|dmv|tesla supercharg/i],
+  ["grocery","超市",/costco whse|trader joe|wholefds|whole foods|h mart|99 ranch|safeway|fred[ -]?meyer|foodland|mitsuwa|uwajimaya|yami|qfc|new seasons|winco|abc market|abc #|you me mart|grocer|market/i],
+  ["dining","餐饮",/cafe|coffee|starbucks|mcdonald|kitchen|food|thai|cuisi|poke|gelato|yogurt|in-n-out|potato corner|auntie anne|restaurant|sushi|ramen|pizza|grill|bakery|boba|\btea\b|doordash|uber eats|lam tualatin|nvidia cafe|^sq \*|^tst\*|khao|bbq|noodle|dumpling|taco|burger|maguro|tamafuji|morning catch/i],
+  ["shop","购物",/amazon|amzn|best buy|columbia|uniqlo|tjmaxx|target|campfire|archers|ikea|home depot|lowe|costco\.com|walmart|nordstrom|rei /i],
+];
+const CAT_LABEL = Object.fromEntries([...CATS.map(c=>[c[0],c[1]]),["other","其他"]]);
+const CAT_KEYS = [...CATS.map(c=>c[0]),"other"];
+
+const S = {
+  accounts:[], tx:[], loadedFrom:null, overrides:{}, merchantRules:{}, pending:null, perks:[], perkUse:{}, offers:[], offersMeta:null, reports:{},
+  tab:"spend", card:"all", cat:"all", q:"", kind:"week", offset:0, offerFit:"all",
+  mcp:null, db:null, sample:null, editing:null
+};
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = (n, d=0) => (n<0?"-":"") + "$" + Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmt2 = n => fmt(n,2);
+const pad = n => String(n).padStart(2,"0");
+const iso = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const parse = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y,m-1,d); };
+const addDays = (d,n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+const monday = d => { const x = new Date(d.getFullYear(),d.getMonth(),d.getDate()); const w = (x.getDay()+6)%7; return addDays(x,-w); };
+const today = () => { const n = new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); };
+const WD = ["一","二","三","四","五","六","日"];
+
+function cleanMerchant(desc){
+  let s = desc.replace(/^(sq|tst|fh|ls|link)\s?\*\s?/i,"").replace(/\s+\d{3}-\d{3,}-?\d*.*$/,"").replace(/\s+#?\d{2,}.*$/,"");
+  s = s.replace(/\s+[A-Z][a-z]\s*$/,"").replace(/\s+(Portland|Honolulu|Tigard|Tualatin|Beaverton|Santa Clara|Seattle|Haleiwa|Wahiawa|Kaneohe)\s*$/i,"");
+  return s.trim() || desc;
+}
+const mkey = m => "m_" + (m||"").toLowerCase().replace(/[^a-z0-9_\-~:@+]/g,"_").slice(0,150);
+function categorize(t){
+  if (S.overrides[t.id]) return S.overrides[t.id];
+  const r = S.merchantRules[mkey(t.merchant)]; if (r) return r;
+  for (const [k,,re] of CATS) if (re.test(t.desc)) return k;
+  return "other";
+}
+const cardName = mask => CARD_NAMES[mask] || mask;
+
+/* ---------- data: Era Context ---------- */
+function showBanner(msg, bad){ const b=$("banner"); b.className="banner"+(bad?" bad":""); b.innerHTML=msg; b.hidden=false; }
+function eraErrorCopy(e){
+  if (window.__SELFHOST && e && (e.code === "needs_reauth" || e.code === "server_not_connected")) return "还没登录 Era Context。<a href='/auth/start'>点这里登录</a>，登录后会自动回到这里。";
+  switch(e && e.code){
+    case "needs_reauth": return "Era Context 登录已过期。请在 claude.ai 设置 → Connectors 里重新连接 Era Context，然后刷新本页。";
+    case "server_not_connected": return "还没有连接 Era Context。请在 claude.ai 设置 → Connectors 添加 Era Context（账户 zhuqiaochu1987@gmail.com），然后刷新本页。";
+    case "selection_required": return "你有多个 Era Context 连接，请在弹出的提示里选一个。";
+    case "not_in_manifest": return "这个页面没有被允许读取 Era Context。可以在页面右上角的权限菜单里打开。";
+    case "approval_required": return "读取 Era Context 需要你批准。<button class='btn' id='approveBtn'>允许并读取</button>";
+    case "server_unavailable": return "Era Context 暂时连不上，稍后刷新再试。";
+    case "tool_error": return "Era Context 返回错误：" + esc(e.message);
+    default: return "读取 Era Context 失败（" + esc(e && e.code || "未知") + "）。";
+  }
+}
+async function call(tool, input, fresh){
+  const r = await S.mcp.callTool(ERA, tool, input, {cache: fresh ? {refresh:true, staleTime:0, gcTime:86400000} : {staleTime:300000, gcTime:86400000}});
+  let p = r.payload;
+  if (typeof p === "string") { try { p = JSON.parse(p); } catch {} }
+  return {p, storedAt: r.cache ? r.cache.storedAt : Date.now()};
+}
+async function loadAccounts(fresh){
+  const {p} = await call(T_ACC, {}, fresh);
+  S.accounts = (p.accounts||[]).filter(a => a.type === "CreditCard");
+}
+async function loadAccountTx(acc, from, fresh){
+  const out = []; let page = 1, pages = 1;
+  do {
+    const {p} = await call(T_TX, {account_group_key: acc.account_group_key, from_date: from, page_size: 100, page}, fresh);
+    for (const t of (p.transactions||[])) out.push(t);
+    pages = (p.pagination && p.pagination.total_pages) || 1;
+    page++;
+  } while (page <= pages && page <= 30);
+  return out;
+}
+async function loadTx(from, fresh){
+  const all = (await Promise.all(S.accounts.map(a => loadAccountTx(a, from, fresh)))).flat();
+  const rows = [];
+  for (const t of all){
+    const mask = (S.accounts.find(a=>a.account_group_key===t.account_group_key)||{}).account_mask || t.account_name;
+    const isPayment = !t.is_cash_outflow && /payment|autopay|thank you|pymt/i.test(t.description||"");
+    if (isPayment) continue;
+    rows.push({id:t.transaction_id, date:t.transaction_date, desc:t.description||"", merchant:cleanMerchant(t.description||""), amt:-Number(t.amount), mask, pending:!!t.is_pending});
+  }
+  rows.sort((a,b)=> b.date.localeCompare(a.date) || b.amt-a.amt);
+  S.tx = rows; S.loadedFrom = from;
+}
+async function boot(){
+  if (!window.claude || !window.claude.use) { showBanner("请在 claude.ai 里打开这个页面，才能读取你的银行数据。"); $("heroSub").textContent="未连接"; return; }
+  claude.use("db").then(db => { if (db) { S.db = db; wireDb(); } });
+  claude.use("sample").then(s => { S.sample = s; renderReport(); });
+  S.mcp = await claude.use("mcp");
+  if (!S.mcp) { showBanner("这个视图不能读取 Era Context。请在 claude.ai 登录后打开本页。"); $("heroSub").textContent="未连接"; $("txList").innerHTML='<div class="empty">没有数据</div>'; return; }
+  await refresh(false);
+}
+async function refresh(fresh){
+  try {
+    $("heroSub").textContent = "正在读取 Era Context…";
+    await loadAccounts(fresh);
+    const from = S.loadedFrom || iso(addDays(today(), -100));
+    await loadTx(from, fresh);
+    $("banner").hidden = true;
+    const now = new Date();
+    $("heroSub").innerHTML = `${S.accounts.length} 张卡 · 数据来自 Era Context · ${pad(now.getHours())}:${pad(now.getMinutes())} 更新 · <a href="#" id="reload">刷新</a>`;
+    $("reload").onclick = e => { e.preventDefault(); refresh(true); };
+    renderAll();
+  } catch(e){
+    showBanner(eraErrorCopy(e), true);
+    $("heroSub").textContent = "读取失败";
+    const ab = $("approveBtn"); if (ab) ab.onclick = () => refresh(true);
+    if (!S.tx.length) $("txList").innerHTML = '<div class="empty">还没有读到交易。</div>';
+  }
+}
+
+/* ---------- data: page store (db) ---------- */
+function wireDb(){
+  const db = S.db;
+  db.collection("overrides").onSnapshot(s => { S.overrides = Object.fromEntries(s.docs.map(d=>[d.id, d.data().category])); renderAll(); }, ()=>{});
+  db.collection("merchantRules").onSnapshot(s => { S.merchantRules = Object.fromEntries(s.docs.map(d=>[d.id, d.data().category])); renderAll(); }, ()=>{});
+  db.collection("perks").onSnapshot(s => { S.perks = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||99)-(b.order||99)); renderPerks(); }, ()=>{ $("perkList").innerHTML='<div class="empty">读不到福利数据。</div>'; });
+  db.collection("perkUse").onSnapshot(s => { S.perkUse = Object.fromEntries(s.docs.map(d=>[d.id, d.data()])); renderPerks(); }, ()=>{});
+  db.collection("offers").onSnapshot(s => { S.offers = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.rank||99)-(b.rank||99)); renderOffers(); }, ()=>{ $("offerList").innerHTML='<div class="empty">读不到新卡数据。</div>'; });
+  db.doc("meta/offers").onSnapshot(d => { S.offersMeta = d.exists ? d.data() : null; renderOffers(); }, ()=>{});
+  db.collection("reports").onSnapshot(s => { S.reports = Object.fromEntries(s.docs.map(d=>[d.id, d.data()])); renderAdvice(); }, ()=>{});
+}
+
+/* ---------- header ---------- */
+function sum(rows){ return rows.reduce((a,t)=>a+t.amt,0); }
+function inRange(rows, a, b){ const A=iso(a), B=iso(b); return rows.filter(t => t.date>=A && t.date<B); }
+function renderHeader(){
+  const t = today();
+  const mStart = new Date(t.getFullYear(), t.getMonth(), 1);
+  const month = inRange(S.tx, mStart, addDays(t,1));
+  $("heroTotal").textContent = fmt(sum(month));
+  $("hsWeek").textContent = fmt(sum(inRange(S.tx, monday(t), addDays(t,1))));
+  $("hsBal").textContent = fmt(S.accounts.reduce((a,x)=>a+Number(x.balance&&x.balance.current||0),0));
+}
+
+/* ---------- tab: spending ---------- */
+function renderChips(){
+  const masks = [...new Set(S.tx.map(t=>t.mask))];
+  const order = Object.keys(CARD_NAMES);
+  masks.sort((a,b)=> (order.indexOf(a)+99)%99 - (order.indexOf(b)+99)%99);
+  $("cardChips").innerHTML = [["all","全部卡"],...masks.map(m=>[m, cardName(m)+" "+m])]
+    .map(([k,l])=>`<button class="chip" data-card="${k}" aria-pressed="${S.card===k}">${esc(l)}</button>`).join("");
+  $("catChips").innerHTML = [["all","全部分类"],...CAT_KEYS.map(k=>[k,CAT_LABEL[k]])]
+    .map(([k,l])=>`<button class="chip" data-cat="${k}" aria-pressed="${S.cat===k}">${esc(l)}</button>`).join("");
+}
+function filtered(){
+  const q = S.q.trim().toLowerCase();
+  return S.tx.filter(t => (S.card==="all"||t.mask===S.card) && (S.cat==="all"||categorize(t)===S.cat) && (!q || t.desc.toLowerCase().includes(q)));
+}
+function renderTx(){
+  const rows = filtered();
+  if (!rows.length){ $("txList").innerHTML = '<div class="empty">没有符合条件的交易。</div>'; }
+  else {
+    const groups = new Map();
+    for (const t of rows.slice(0, 400)) { if (!groups.has(t.date)) groups.set(t.date, []); groups.get(t.date).push(t); }
+    let html = "";
+    for (const [d, ts] of groups){
+      const dt = parse(d);
+      html += `<div class="day"><div class="dayh"><span>${dt.getMonth()+1}月${dt.getDate()}日 周${WD[(dt.getDay()+6)%7]}</span><span class="num">${fmt2(sum(ts))}</span></div>`;
+      for (const t of ts){
+        const c = categorize(t);
+        const cls = t.amt < 0 ? "refund" : (t.amt >= 300 ? "big" : "");
+        const catEl = S.editing === t.id
+          ? `<select class="catsel" data-tx="${t.id}" aria-label="修改分类">${CAT_KEYS.map(k=>`<option value="${k}" ${k===c?"selected":""}>${CAT_LABEL[k]}</option>`).join("")}</select>`
+          : `<button class="cat" data-edit="${t.id}" title="${S.db?"点击修改分类":""}">${CAT_LABEL[c]}</button>`;
+        html += `<div class="tx ${cls}"><div class="m" title="${esc(t.desc)}">${esc(t.merchant)}</div><div class="a num">${t.amt<0?"+"+fmt2(-t.amt):fmt2(t.amt)}</div>
+          <div class="meta">${catEl}<span>${esc(cardName(t.mask))} ${esc(t.mask)}</span>${t.pending?"<span>待入账</span>":""}${t.amt<0?"<span>退款</span>":""}</div></div>`;
+      }
+      html += `</div>`;
+    }
+    if (rows.length > 400) html += `<div class="empty">只显示最近 400 笔，用上面的筛选缩小范围。</div>`;
+    $("txList").innerHTML = html;
+  }
+  const mb = $("moreBtn");
+  mb.hidden = !S.loadedFrom || S.loadedFrom <= HISTORY_START;
+  mb.textContent = "加载更早的交易（从 " + (S.loadedFrom||"") + " 往前）";
+}
+async function loadMore(){
+  const mb = $("moreBtn"); mb.disabled = true; mb.textContent = "加载中…";
+  try { await loadTx(HISTORY_START, false); renderAll(); } catch(e){ showBanner(eraErrorCopy(e), true); }
+  mb.disabled = false;
+}
+
+/* ---------- tab: report ---------- */
+function period(){
+  const t = today();
+  if (S.kind === "week"){
+    const a = addDays(monday(t), 7*S.offset), b = addDays(a,7);
+    const label = `${a.getMonth()+1}/${a.getDate()} – ${addDays(b,-1).getMonth()+1}/${addDays(b,-1).getDate()}`;
+    return {a, b, pa:addDays(a,-7), pb:a, key:"w-"+iso(a), label, done: b <= t, title:`${a.getMonth()+1}月${a.getDate()}日这一周`};
+  }
+  const a = new Date(t.getFullYear(), t.getMonth()+S.offset, 1), b = new Date(a.getFullYear(), a.getMonth()+1, 1);
+  const pa = new Date(a.getFullYear(), a.getMonth()-1, 1);
+  return {a, b, pa, pb:a, key:"m-"+a.getFullYear()+"-"+pad(a.getMonth()+1), label:`${a.getFullYear()}年${a.getMonth()+1}月`, done: b <= t, title:`${a.getFullYear()}年${a.getMonth()+1}月`};
+}
+function stats(P){
+  const rows = inRange(S.tx, P.a, P.b), prev = inRange(S.tx, P.pa, P.pb);
+  const by = (f) => { const m = {}; for (const t of rows) m[f(t)] = (m[f(t)]||0) + t.amt; return Object.entries(m).filter(([,v])=>Math.abs(v)>0.005).sort((x,y)=>y[1]-x[1]); };
+  const byCat = by(t=>categorize(t)), byCard = by(t=>t.mask), byMerchant = by(t=>t.merchant);
+  let series = [];
+  if (S.kind === "week") for (let i=0;i<7;i++){ const d = addDays(P.a,i); series.push({l:"周"+WD[i], v:sum(inRange(rows,d,addDays(d,1)))}); }
+  else { for (let d = new Date(P.a); d < P.b; d = addDays(d,1)) series.push({l:String(d.getDate()), v:sum(inRange(rows,d,addDays(d,1)))}); }
+  return {rows, total:sum(rows), prevTotal:sum(prev), count:rows.filter(t=>t.amt>0).length, byCat, byCard, byMerchant, series, big:[...rows].sort((x,y)=>y.amt-x.amt).slice(0,5)};
+}
+function barChart(el, series, isWeek){
+  const W = 720, H = 150, padB = 18, padT = 14;
+  const max = Math.max(1, ...series.map(s=>s.v));
+  const n = series.length, gap = 2, bw = (W - gap*(n-1)) / n;
+  const nice = (() => { const p = Math.pow(10, Math.floor(Math.log10(max))); return [1,2,2.5,5,10].map(k=>k*p).find(v=>v>=max); })();
+  const y = v => padT + (H-padT-padB) * (1 - Math.max(0,v)/nice);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="消费趋势">`;
+  s += `<line x1="0" x2="${W}" y1="${y(nice)}" y2="${y(nice)}" stroke="var(--rule)" stroke-width="1"/>`;
+  s += `<line x1="0" x2="${W}" y1="${y(nice/2)}" y2="${y(nice/2)}" stroke="var(--rule)" stroke-width="1"/>`;
+  s += `<line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="var(--ink-3)" stroke-width="1"/>`;
+  s += `<text x="${W}" y="${y(nice)-4}" text-anchor="end">${fmt(nice)}</text><text x="${W}" y="${y(nice/2)-4}" text-anchor="end">${fmt(nice/2)}</text>`;
+  series.forEach((d,i)=>{
+    const x = i*(bw+gap), h = Math.max(0, y(0)-y(d.v)), r = Math.min(4, bw/2, h);
+    if (h > 0) s += `<path d="M${x},${y(0)} V${y(0)-h+r} Q${x},${y(0)-h} ${x+r},${y(0)-h} H${x+bw-r} Q${x+bw},${y(0)-h} ${x+bw},${y(0)-h+r} V${y(0)} Z" fill="var(--bar)"/>`;
+    s += `<rect x="${x}" y="0" width="${bw+gap}" height="${H}" fill="transparent" data-i="${i}"/>`;
+    if (isWeek || i%5===0 || i===n-1) s += `<text x="${x+bw/2}" y="${H-4}" text-anchor="middle">${esc(d.l)}</text>`;
+  });
+  s += `</svg><div class="tip" hidden></div>`;
+  el.innerHTML = s;
+  const tip = el.querySelector(".tip"), svg = el.querySelector("svg");
+  svg.addEventListener("pointermove", e => {
+    const i = e.target.dataset && e.target.dataset.i; if (i == null) { tip.hidden = true; return; }
+    const d = series[+i], r = svg.getBoundingClientRect(), sc = r.width / W;
+    tip.hidden = false; tip.textContent = `${isWeek?d.l:d.l+"日"} ${fmt2(d.v)}`;
+    tip.style.left = ((+i)*(bw+gap)+bw/2)*sc + "px"; tip.style.top = y(Math.max(0,d.v))*sc + "px";
+  });
+  svg.addEventListener("pointerleave", () => tip.hidden = true);
+}
+function barRows(el, entries, total, labelOf){
+  if (!entries.length){ el.innerHTML = '<div class="empty">这期没有消费。</div>'; return; }
+  const max = Math.max(...entries.map(e=>e[1]));
+  el.innerHTML = entries.map(([k,v]) => `<div class="barrow"><span>${esc(labelOf(k))}</span><div class="track"><div class="fill" style="width:${Math.max(0,v/max*100).toFixed(1)}%"></div></div><span class="v num">${fmt(v)}<span class="pct">${total>0?Math.round(v/total*100)+"%":""}</span></span></div>`).join("");
+}
+function renderReport(){
+  const P = period(), st = stats(P);
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.kind===S.kind));
+  $("pLabel").textContent = P.label + (P.done ? "" : " · 进行中");
+  $("nextP").disabled = S.offset >= 0;
+  $("kTotal").textContent = fmt(st.total);
+  $("kCount").textContent = st.count;
+  $("kPrevLabel").textContent = S.kind==="week" ? "比上周" : "比上月";
+  const dl = st.total - st.prevTotal, pct = st.prevTotal>0 ? Math.round(dl/st.prevTotal*100) : null;
+  $("kDelta").innerHTML = st.prevTotal>0 ? `<span class="delta ${dl>0?"up":"down"}">${dl>0?"+":""}${pct}%</span>` : "—";
+  $("trendLabel").textContent = S.kind==="week" ? "每日消费" : "每日消费（本月）";
+  barChart($("trend"), st.series, S.kind==="week");
+  barRows($("catBars"), st.byCat, st.total, k=>CAT_LABEL[k]||k);
+  barRows($("cardBars"), st.byCard, st.total, k=>cardName(k));
+  $("bigList").innerHTML = st.big.length ? st.big.filter(t=>t.amt>0).map(t=>`<div class="li"><span>${esc(t.merchant)} <span class="muted">${t.date.slice(5)} · ${esc(cardName(t.mask))}</span></span><span class="num">${fmt2(t.amt)}</span></div>`).join("") : '<div class="empty">没有消费。</div>';
+  renderAdvice();
+}
+function adviceHtml(text){
+  return text.split(/\n+/).map(l=>l.replace(/^[-•*]\s*/,"").trim()).filter(Boolean)
+    .map(l=>"<p>"+esc(l).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")+"</p>").join("");
+}
+function renderAdvice(){
+  const box = $("adviceBox"); if (!box) return;
+  const P = period(), rep = S.reports[P.key];
+  if (rep && rep.text){
+    const when = rep.generatedAt ? new Date(rep.generatedAt) : null;
+    box.innerHTML = `<div class="advice">${adviceHtml(rep.text)}</div><div class="row" style="margin-top:10px;justify-content:space-between"><span class="muted">${when?`${when.getMonth()+1}/${when.getDate()} 生成`:""}${rep.by?" · "+esc(rep.by):""}</span>${S.sample?'<button class="btn" id="genBtn">重新生成</button>':""}</div>`;
+  } else if (!S.sample){
+    box.innerHTML = `<div class="advice"><p class="muted">这期还没有建议。在 claude.ai 里打开本页就能一键生成。</p></div>`;
+  } else {
+    box.innerHTML = `<div class="advice"><p>${P.done?"这期已经结束，":"这期还没结束，"}可以让 Claude 根据上面的数据写几条建议。</p><button class="btn primary" id="genBtn">生成${S.kind==="week"?"本周":"本月"}建议</button></div>`;
+  }
+  const g = $("genBtn"); if (g) g.onclick = generateAdvice;
+}
+let genCtl = null;
+async function generateAdvice(){
+  const P = period(), st = stats(P), box = $("adviceBox");
+  const cards = S.perks.map(p => `${p.name} ${p.mask}（年费 $${p.fee||0}）：${(p.earn||[]).map(e=>e.mult+"x "+e.label).join("，")}`).join("\n");
+  const payload = {
+    周期: (S.kind==="week"?"周 ":"月 ") + P.label + (P.done?"":"（进行中）"),
+    总消费: Math.round(st.total), 上期: Math.round(st.prevTotal), 笔数: st.count,
+    分类: Object.fromEntries(st.byCat.map(([k,v])=>[CAT_LABEL[k]||k, Math.round(v)])),
+    按卡: Object.fromEntries(st.byCard.map(([k,v])=>[cardName(k)+" "+k, Math.round(v)])),
+    商户前十: st.byMerchant.slice(0,10).map(([k,v])=>k+" $"+Math.round(v)),
+    最大五笔: st.big.map(t=>`${t.date} ${t.merchant} $${t.amt.toFixed(2)} ${cardName(t.mask)}`)
+  };
+  const prompt = `你是一位务实的个人理财顾问。用户在美国，用美元，下面是他这一期的信用卡消费统计和他持有的卡。请用中文写 3 到 5 条建议，每条一行，以"- "开头，开头用 **加粗** 写一个短结论，后面一句话说明，包含具体金额或卡名。重点：1) 消费变化和原因；2) 哪些消费换一张卡能多拿积分（按下面的倍数估算多拿多少）；3) 可以省的订阅或重复开销；4) 需要留意的异常。不要客套，不要标题，不要编造数据里没有的事实。
+
+消费统计：
+${JSON.stringify(payload, null, 1)}
+
+持有的卡：
+${cards || "（福利数据未加载）"}`;
+  box.innerHTML = `<div class="advice"><div id="genOut"><p class="muted">正在生成…</p></div></div>`;
+  if (genCtl) genCtl.abort(); genCtl = new AbortController();
+  try {
+    const r = await S.sample(prompt, {signal: genCtl.signal, modelTier:"default", cache:false, onText: ({text}) => { const o=$("genOut"); if (o) o.innerHTML = adviceHtml(text); }});
+    if (S.db) await S.db.doc("reports/"+P.key).set({kind:S.kind, label:P.label, text:r.text, total:Math.round(st.total), generatedAt:new Date().toISOString(), by:"页面生成"});
+    else { S.reports[P.key] = {text:r.text, generatedAt:new Date().toISOString()}; renderAdvice(); }
+  } catch(e){
+    if (e && e.code === "cancelled") return;
+    const msg = {not_granted:"没有获得调用 Claude 的许可。可以在页面权限菜单里打开。", rate_limited:"调用太频繁，稍等一会儿再试。"}[e && e.code] || "生成失败（"+esc(e&&e.code||"未知")+"）。";
+    box.innerHTML = `<div class="advice"><p>${msg}</p><button class="btn" id="genBtn">再试一次</button></div>`;
+    $("genBtn").onclick = generateAdvice;
+  }
+}
+
+/* ---------- tab: perks ---------- */
+function periodKey(cadence){
+  const t = today();
+  if (cadence === "monthly") return t.getFullYear()+"-"+pad(t.getMonth()+1);
+  if (cadence === "quarterly") return t.getFullYear()+"-Q"+(Math.floor(t.getMonth()/3)+1);
+  if (cadence === "semiannual") return t.getFullYear()+"-H"+(t.getMonth()<6?1:2);
+  return String(t.getFullYear());
+}
+const CAD = {monthly:"每月", quarterly:"每季", semiannual:"每半年", annual:"每年", anniversary:"续卡后", once:"一次"};
+function renderPerks(){
+  // best card per category
+  const best = {};
+  for (const p of S.perks) for (const e of (p.earn||[])) for (const c of (e.cats||[])) { const r = e.mult * (e.unit==="%" ? 1 : (p.cpp||1)); if (!best[c] || r > best[c].r) best[c] = {r, mult:e.mult, name:p.name, unit:e.unit||"x"}; }
+  const bestKeys = CAT_KEYS.filter(k=>best[k]);
+  $("bestCard").innerHTML = bestKeys.length ? bestKeys.map(k=>`<div class="li"><span>${CAT_LABEL[k]}</span><span><b>${esc(best[k].name)}</b> <span class="num muted">${best[k].mult}${esc(best[k].unit)}${best[k].unit==="%"?"":" ≈ "+best[k].r.toFixed(1)+"%"}</span></span></div>`).join("") : '<div class="empty">等福利数据加载后显示。</div>';
+  if (!S.perks.length){ $("perkList").innerHTML = S.db ? '<div class="empty">还没有福利数据。</div>' : '<div class="empty">在 claude.ai 里打开本页才能看到福利数据。</div>'; return; }
+  const yr = String(today().getFullYear());
+  const use = S.perkUse[yr] || {};
+  $("perkList").innerHTML = S.perks.map(p => `<div class="card">
+    <h3>${esc(p.name)} <span class="num">${esc(p.issuer||"")} ${esc(p.mask)} · 年费 $${p.fee||0}${p.feeMonth?" · "+p.feeMonth+"月扣":""}</span></h3>
+    ${(p.earn||[]).length?`<div class="earn">${p.earn.map(e=>`<span><b>${e.mult}${esc(e.unit||"x")}</b> ${esc(e.label)}</span>`).join("")}</div>`:""}
+    ${(p.credits||[]).map(c => { const k = c.id+"@"+periodKey(c.cadence); const done = !!use[k];
+      return `<label class="credit ${done?"done":""}"><input type="checkbox" data-use="${esc(k)}" ${done?"checked":""} ${S.db?"":"disabled"}><span class="when">${CAD[c.cadence]||esc(c.cadence)}</span><span class="t">${esc(c.label)}${c.note?` <span class="muted">${esc(c.note)}</span>`:""}</span></label>`; }).join("")}
+    ${p.note?`<div class="muted" style="margin-top:6px">${esc(p.note)}</div>`:""}
+  </div>`).join("") + (S.perks[0] && S.perks[0].asOf ? `<p class="muted">福利信息核对于 ${esc(S.perks[0].asOf)}，以发卡行官网为准。</p>` : "");
+}
+async function togglePerk(k, on){
+  if (!S.db) return;
+  const yr = String(today().getFullYear());
+  try { await S.db.doc("perkUse/"+yr).set({...(S.perkUse[yr]||{}), [k]: on}); } catch(e){ renderPerks(); }
+}
+
+/* ---------- tab: offers ---------- */
+const FIT = {go:"推荐", maybe:"可以考虑", no:"暂不适合"};
+function renderOffers(){
+  const m = S.offersMeta;
+  $("offerHead").innerHTML = m ? `${esc(m.summary||"")}<br>来源：<a href="${esc(m.url||"https://www.uscreditcardguide.com/the-best-credit-card-sign-up-bonus/")}" target="_blank" rel="noopener">美卡指南 开卡奖励排行</a>（网站 ${esc(m.sourceUpdated||"")} 更新，${esc(m.asOf||"")} 读取）` : "";
+  $("offerChips").innerHTML = [["all","全部"],["go","推荐"],["maybe","可以考虑"],["no","暂不适合"]].map(([k,l])=>`<button class="chip" data-fit="${k}" aria-pressed="${S.offerFit===k}">${l}</button>`).join("");
+  const list = S.offers.filter(o => S.offerFit==="all" || o.fit===S.offerFit);
+  if (!S.offers.length){ $("offerList").innerHTML = S.db ? '<div class="empty">还没有新卡数据。</div>' : '<div class="empty">在 claude.ai 里打开本页才能看到新卡数据。</div>'; return; }
+  $("offerList").innerHTML = list.map(o => `<div class="offer">
+    <div class="top"><span class="name">${esc(o.name)}</span><span class="tag ${o.fit==="go"?"go":o.fit==="no"?"no":""}">${FIT[o.fit]||""}</span></div>
+    <div class="facts"><span>奖励 <b class="num">${esc(o.bonus)}</b></span><span>门槛 ${esc(o.spend)}</span><span>首年价值约 <span class="num">${esc(o.value)}</span></span><span>年费 ${esc(o.fee)}</span></div>
+    <div class="why">${esc(o.why)}</div>${o.caveat?`<div class="cav">${esc(o.caveat)}</div>`:""}
+  </div>`).join("") || '<div class="empty">这一类没有卡。</div>';
+}
+
+/* ---------- category changes ---------- */
+function setOne(id, v){
+  S.overrides[id] = v; renderAll();
+  if (S.db) S.db.doc("overrides/"+id).set({category:v}).catch(()=>{});
+}
+async function setAll(merchant, v){
+  const k = mkey(merchant);
+  S.merchantRules[k] = v;
+  const same = S.tx.filter(t => mkey(t.merchant) === k && S.overrides[t.id]);
+  for (const t of same) delete S.overrides[t.id];
+  renderAll();
+  if (!S.db) return;
+  try {
+    await S.db.doc("merchantRules/"+k).set({merchant, category:v, updatedAt:new Date().toISOString()});
+    for (const t of same) await S.db.doc("overrides/"+t.id).delete();
+  } catch(e){ showBanner("保存分类规则失败，刷新后再试一次。", true); }
+}
+function askScope(id, v){
+  const t = S.tx.find(x => x.id === id); if (!t) return;
+  const n = S.tx.filter(x => mkey(x.merchant) === mkey(t.merchant)).length;
+  if (n <= 1 && !S.db) { setOne(id, v); return; }
+  S.pending = {id, v, merchant:t.merchant, n};
+  const sh = $("sheet");
+  sh.innerHTML = `<div class="sheet-card" role="dialog" aria-label="修改分类">
+    <div>把 <b>${esc(t.merchant)}</b> 改成 <b>${CAT_LABEL[v]}</b></div>
+    <div class="muted">${n > 1 ? `已加载的交易里有 ${n} 笔这个商户。` : "目前只有这一笔。"}选"全部同名"后，以后新的同名交易也会自动归到${CAT_LABEL[v]}。</div>
+    <div class="row" style="justify-content:flex-end;margin-top:6px">
+      <button class="btn" id="scopeCancel">取消</button>
+      <button class="btn" id="scopeOne">只改这一笔</button>
+      <button class="btn primary" id="scopeAll">全部同名${n>1?`（${n} 笔）`:""}</button>
+    </div></div>`;
+  sh.hidden = false;
+  $("scopeAll").focus();
+}
+function closeSheet(){ $("sheet").hidden = true; S.pending = null; renderTx(); }
+document.addEventListener("keydown", e => { if (e.key === "Escape" && S.pending) closeSheet(); });
+
+/* ---------- wiring ---------- */
+function renderAll(){ renderHeader(); renderChips(); renderTx(); renderReport(); }
+function setTab(t){
+  S.tab = t;
+  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab===t));
+  ["spend","report","perks","offers"].forEach(k => $("tab-"+k).hidden = k!==t);
+  try { localStorage.setItem("fa.tab", t); } catch {}
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("button, a"); if (!b) return;
+  if (b.dataset.tab) setTab(b.dataset.tab);
+  else if (b.dataset.card) { S.card = b.dataset.card; renderChips(); renderTx(); }
+  else if (b.dataset.cat) { S.cat = b.dataset.cat; renderChips(); renderTx(); }
+  else if (b.dataset.edit) { if (S.db) { S.editing = b.dataset.edit; renderTx(); const s = document.querySelector(`select[data-tx="${b.dataset.edit}"]`); if (s) s.focus(); } }
+  else if (b.dataset.kind) { S.kind = b.dataset.kind; S.offset = 0; renderReport(); }
+  else if (b.dataset.fit) { S.offerFit = b.dataset.fit; renderOffers(); }
+  else if (b.id === "prevP") { S.offset--; renderReport(); }
+  else if (b.id === "nextP") { if (S.offset < 0) { S.offset++; renderReport(); } }
+  else if (b.id === "moreBtn") loadMore();
+  else if (b.id === "scopeCancel") closeSheet();
+  else if (b.id === "scopeOne") { const p = S.pending; closeSheet(); setOne(p.id, p.v); }
+  else if (b.id === "scopeAll") { const p = S.pending; closeSheet(); setAll(p.merchant, p.v); }
+});
+document.addEventListener("change", e => {
+  const s = e.target;
+  if (s.matches("select.catsel")) { const id = s.dataset.tx, v = s.value; S.editing = null; askScope(id, v); }
+  else if (s.matches("input[data-use]")) togglePerk(s.dataset.use, s.checked);
+});
+document.addEventListener("focusout", e => { if (e.target.matches && e.target.matches("select.catsel")) setTimeout(()=>{ if (S.editing) { S.editing = null; renderTx(); } }, 150); });
+$("q").addEventListener("input", e => { S.q = e.target.value; renderTx(); });
+$("nextP").disabled = true;
+try { const t = localStorage.getItem("fa.tab"); if (t && $("tab-"+t)) setTab(t); } catch {}
+renderChips(); renderReport(); renderPerks(); renderOffers();
+boot();
+</script>
