@@ -112,7 +112,7 @@ a{color:var(--accent)}
 <div class="wrap">
   <header>
     <div>
-      <div class="brand">金融小助手 · 本月信用卡消费</div>
+      <div class="brand">金融小助手 · 本月消费</div>
       <div class="hero num" id="heroTotal">—</div>
       <div class="hero-sub" id="heroSub">正在连接 Era Context…</div>
     </div>
@@ -161,6 +161,10 @@ a{color:var(--accent)}
     <div class="bars" id="catBars"></div>
     <div class="label">按卡</div>
     <div class="bars" id="cardBars"></div>
+    <div class="label" id="incLabel">收入</div>
+    <div class="list" id="incList"></div>
+    <div class="label" id="payLabel">信用卡还款 · 从 checking 付出，不算消费</div>
+    <div class="list" id="payList"></div>
     <div class="label">最大的几笔</div>
     <div class="list" id="bigList"></div>
     <div class="label">理财建议</div>
@@ -188,9 +192,11 @@ const T_TX = "transactions__list_transactions";
 const T_ACC = "accounts__list_financial_accounts";
 const HISTORY_START = "2026-04-01";
 
-const CARD_NAMES = {"0023":"Smartly","4920":"Freedom Unlimited","6875":"Freedom","5427":"Prime Visa","7702":"Atmos Ascent","7425":"Marriott Boundless","6767":"World of Hyatt","7552":"Sapphire Preferred"};
+const CARD_NAMES = {"0023":"Smartly","4920":"Freedom Unlimited","6875":"Freedom","5427":"Prime Visa","7702":"Atmos Ascent","7425":"Marriott Boundless","6767":"World of Hyatt","7552":"Sapphire Preferred","1496":"U.S. Bank Checking"};
 
 const CATS = [
+  ["housing","房租住房",/zelle instant pmt to may\b/i],
+  ["bills","账单",/comcast|xfinity|pg&e|pacific gas|verizon|t-mobile|at&t|\bwater\b|\belectric\b|utility/i],
   ["travel","旅行",/airbnb|alaska air|airline|hotel|marriott|hyatt|hilton|rent-a-car|alamo|hertz|enterprise rent|avis|expedia|delta air|united air|southwest|hawaiian air|vrbo|booking\.com/i],
   ["fun","娱乐门票",/ticketmaster|cinemark|amc |pcc tickets|kualoa|waimea|hanauma|recreation\.gov|fun station|museum|dive oahu|stubhub|eventbrite/i],
   ["sub","订阅",/apple\.com\/bill|substack|anthropic|openai|netflix|spotify|youtube|x corp|twitter|lemonade|hulu|disney|icloud|google \*/i],
@@ -204,7 +210,7 @@ const CAT_LABEL = Object.fromEntries([...CATS.map(c=>[c[0],c[1]]),["other","其�
 const CAT_KEYS = [...CATS.map(c=>c[0]),"other"];
 
 const S = {
-  accounts:[], tx:[], loadedFrom:null, overrides:{}, merchantRules:{}, pending:null, perks:[], perkUse:{}, offers:[], offersMeta:null, reports:{},
+  accounts:[], tx:[], payments:[], income:[], loadedFrom:null, overrides:{}, merchantRules:{}, pending:null, perks:[], perkUse:{}, offers:[], offersMeta:null, reports:{},
   tab:"spend", card:"all", cat:"all", q:"", kind:"week", offset:0, offerFit:"all",
   mcp:null, db:null, sample:null, editing:null
 };
@@ -223,6 +229,11 @@ const today = () => { const n = new Date(); return new Date(n.getFullYear(),n.ge
 const WD = ["一","二","三","四","五","六","日"];
 
 function cleanMerchant(desc){
+  // Checking-account wording: "Zelle Instant Pmt To May Usb…", "Electronic Withdrawal Comcast-xfinity", "Check #145150"
+  const z = desc.match(/^zelle instant pmt (to|from) (.+?) (usb|jpm)\w+$/i);
+  if (z) return "Zelle " + (z[1].toLowerCase()==="to" ? "→ " : "← ") + z[2];
+  if (/^check #?\d+/i.test(desc)) return "支票 " + desc.replace(/^check\s*/i,"");
+  desc = desc.replace(/^(web authorized pmt|electronic withdrawal|electronic deposit|real time payment to)\s+/i,"").replace(/^st of ca dmv/i,"CA DMV");
   let s = desc.replace(/^(sq|tst|fh|ls|link)\s?\*\s?/i,"").replace(/\s+\d{3}-\d{3,}-?\d*.*$/,"").replace(/\s+#?\d{2,}.*$/,"");
   s = s.replace(/\s+[A-Z][a-z]\s*$/,"").replace(/\s+(Portland|Honolulu|Tigard|Tualatin|Beaverton|Santa Clara|Seattle|Haleiwa|Wahiawa|Kaneohe)\s*$/i,"");
   return s.trim() || desc;
@@ -235,6 +246,16 @@ function categorize(t){
   return "other";
 }
 const cardName = mask => CARD_NAMES[mask] || mask;
+// Checking-account descriptions that are credit card payments, and who they paid.
+const CARD_PAYEES = [
+  [/chase credit crd|pmt chase|chase card/i, "Chase"],
+  [/pmt u\.?s\.? bank|u\.?s\.? bank card/i, "U.S. Bank（Smartly 0023）"],
+  [/pmt bank of america|bank of america card|boa card/i, "Bank of America（Atmos 7702）"],
+  [/amex|american express|citi card|discover|capital one|barclay|credit crd|credit card/i, null],
+];
+const cardPayee = d => { for (const [re, to] of CARD_PAYEES) if (re.test(d)) return to || d; return null; };
+// Checking outflows that only move money between your own accounts.
+const NOT_SPEND = /robinhood|interactive brok|schwab|fidelity|vanguard|e\*?trade|coinbase|wealthfront|betterment|treasury ?direct|transfer to|online transfer|mobile banking transfer/i;
 
 /* ---------- data: Era Context ---------- */
 function showBanner(msg, bad){ const b=$("banner"); b.className="banner"+(bad?" bad":""); b.innerHTML=msg; b.hidden=false; }
@@ -259,7 +280,7 @@ async function call(tool, input, fresh){
 }
 async function loadAccounts(fresh){
   const {p} = await call(T_ACC, {}, fresh);
-  S.accounts = (p.accounts||[]).filter(a => a.type === "CreditCard");
+  S.accounts = (p.accounts||[]).filter(a => a.type === "CreditCard" || a.type === "Checking");
 }
 async function loadAccountTx(acc, from, fresh){
   const out = []; let page = 1, pages = 1;
@@ -273,14 +294,30 @@ async function loadAccountTx(acc, from, fresh){
 }
 async function loadTx(from, fresh){
   const all = (await Promise.all(S.accounts.map(a => loadAccountTx(a, from, fresh)))).flat();
-  const rows = [];
+  const rows = [], payments = [], income = [];
   for (const t of all){
-    const mask = (S.accounts.find(a=>a.account_group_key===t.account_group_key)||{}).account_mask || t.account_name;
-    const isPayment = !t.is_cash_outflow && /payment|autopay|thank you|pymt/i.test(t.description||"");
+    const acc = S.accounts.find(a=>a.account_group_key===t.account_group_key) || {};
+    const mask = acc.account_mask || t.account_name;
+    if (acc.type === "Checking"){
+      // Checking: money in is income (unless it's a move from a brokerage or your own account);
+      // card payments go to their own list so card charges aren't counted twice.
+      const d = t.description || "";
+      if (!t.is_cash_outflow || Number(t.amount) >= 0) {
+        if (!NOT_SPEND.test(d)) income.push({id:t.transaction_id, date:t.transaction_date, from:cleanMerchant(d), amt:Number(t.amount), pending:!!t.is_pending});
+        continue;
+      }
+      const to = cardPayee(d);
+      if (to) { payments.push({id:t.transaction_id, date:t.transaction_date, to, amt:-Number(t.amount), pending:!!t.is_pending}); continue; }
+      if (NOT_SPEND.test(d)) continue;
+    }
+    const isPayment = !t.is_cash_outflow && /payment|autopay|thank you|pymt|online\/mobile recurring/i.test(t.description||"");
     if (isPayment) continue;
     rows.push({id:t.transaction_id, date:t.transaction_date, desc:t.description||"", merchant:cleanMerchant(t.description||""), amt:-Number(t.amount), mask, pending:!!t.is_pending});
   }
   rows.sort((a,b)=> b.date.localeCompare(a.date) || b.amt-a.amt);
+  payments.sort((a,b)=> b.date.localeCompare(a.date));
+  S.payments = payments;
+  S.income = income.sort((a,b)=> b.date.localeCompare(a.date));
   S.tx = rows; S.loadedFrom = from;
 }
 async function boot(){
@@ -299,7 +336,7 @@ async function refresh(fresh){
     await loadTx(from, fresh);
     $("banner").hidden = true;
     const now = new Date();
-    $("heroSub").innerHTML = `${S.accounts.length} 张卡 · 数据来自 Era Context · ${pad(now.getHours())}:${pad(now.getMinutes())} 更新 · <a href="#" id="reload">刷新</a>`;
+    $("heroSub").innerHTML = `${S.accounts.filter(a=>a.type==="CreditCard").length} 张卡${S.accounts.some(a=>a.type==="Checking")?" + checking":""} · 数据来自 Era Context · ${pad(now.getHours())}:${pad(now.getMinutes())} 更新 · <a href="#" id="reload">刷新</a>`;
     $("reload").onclick = e => { e.preventDefault(); refresh(true); };
     renderAll();
   } catch(e){
@@ -331,7 +368,7 @@ function renderHeader(){
   const month = inRange(S.tx, mStart, addDays(t,1));
   $("heroTotal").textContent = fmt(sum(month));
   $("hsWeek").textContent = fmt(sum(inRange(S.tx, monday(t), addDays(t,1))));
-  $("hsBal").textContent = fmt(S.accounts.reduce((a,x)=>a+Number(x.balance&&x.balance.current||0),0));
+  $("hsBal").textContent = fmt(S.accounts.filter(a=>a.type==="CreditCard").reduce((a,x)=>a+Number(x.balance&&x.balance.current||0),0));
 }
 
 /* ---------- tab: spending ---------- */
@@ -450,6 +487,12 @@ function renderReport(){
   barChart($("trend"), st.series, S.kind==="week");
   barRows($("catBars"), st.byCat, st.total, k=>CAT_LABEL[k]||k);
   barRows($("cardBars"), st.byCard, st.total, k=>cardName(k));
+  const inc = inRange(S.income, P.a, P.b);
+  $("incLabel").textContent = `收入 · 进 checking 的钱，不含券商和自己账户之间的转账${inc.length ? " · 共 " + fmt2(sum(inc)) : ""}`;
+  $("incList").innerHTML = inc.length ? inc.map(p=>`<div class="li"><span>${esc(p.from)} <span class="muted">${p.date.slice(5)}${p.pending?" · 待入账":""}</span></span><span class="num">${fmt2(p.amt)}</span></div>`).join("") : '<div class="empty">这一期没有收入。</div>';
+  const pays = inRange(S.payments, P.a, P.b);
+  $("payLabel").textContent = `信用卡还款 · 从 checking 付出，不算消费${pays.length ? " · 共 " + fmt2(sum(pays)) : ""}`;
+  $("payList").innerHTML = pays.length ? pays.map(p=>`<div class="li"><span>${esc(p.to)} <span class="muted">${p.date.slice(5)}${p.pending?" · 待入账":""}</span></span><span class="num">${fmt2(p.amt)}</span></div>`).join("") : '<div class="empty">这一期没有还款。</div>';
   $("bigList").innerHTML = st.big.length ? st.big.filter(t=>t.amt>0).map(t=>`<div class="li"><span>${esc(t.merchant)} <span class="muted">${t.date.slice(5)} · ${esc(cardName(t.mask))}</span></span><span class="num">${fmt2(t.amt)}</span></div>`).join("") : '<div class="empty">没有消费。</div>';
   renderAdvice();
 }
@@ -482,7 +525,7 @@ async function generateAdvice(){
     商户前十: st.byMerchant.slice(0,10).map(([k,v])=>k+" $"+Math.round(v)),
     最大五笔: st.big.map(t=>`${t.date} ${t.merchant} $${t.amt.toFixed(2)} ${cardName(t.mask)}`)
   };
-  const prompt = `你是一位务实的个人理财顾问。用户在美国，用美元，下面是他这一期的信用卡消费统计和他持有的卡。请用中文写 3 到 5 条建议，每条一行，以"- "开头，开头用 **加粗** 写一个短结论，后面一句话说明，包含具体金额或卡名。重点：1) 消费变化和原因；2) 哪些消费换一张卡能多拿积分（按下面的倍数估算多拿多少）；3) 可以省的订阅或重复开销；4) 需要留意的异常。不要客套，不要标题，不要编造数据里没有的事实。
+  const prompt = `你是一位务实的个人理财顾问。用户在美国，用美元，下面是他这一期的消费统计（信用卡加 U.S. Bank Checking 1496 直接付出的钱，信用卡还款和转去券商的钱已经去掉）和他持有的卡。Checking 付的钱拿不到积分，能改用信用卡付的可以指出来。请用中文写 3 到 5 条建议，每条一行，以"- "开头，开头用 **加粗** 写一个短结论，后面一句话说明，包含具体金额或卡名。重点：1) 消费变化和原因；2) 哪些消费换一张卡能多拿积分（按下面的倍数估算多拿多少）；3) 可以省的订阅或重复开销；4) 需要留意的异常。不要客套，不要标题，不要编造数据里没有的事实。
 
 消费统计：
 ${JSON.stringify(payload, null, 1)}

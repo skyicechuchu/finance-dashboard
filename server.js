@@ -126,9 +126,11 @@ async function sync({ full = false } = {}) {
   syncing = (async () => {
     const accounts = (await callEra("list_financial_accounts", {})).accounts || [];
     kvSet("accounts", accounts);
-    const cards = new Set(accounts.filter(a => a.type === "CreditCard").map(a => a.account_group_key));
+    const cards = new Set(accounts.filter(a => a.type === "CreditCard" || a.type === "Checking").map(a => a.account_group_key));
     const last = kvGet("last_sync");
-    const from = full || !last ? HISTORY_START : iso(new Date(Date.now() - 14 * 864e5));
+    // A newly tracked account (e.g. checking added later) needs its full history once.
+    const known = new Set(kvGet("synced_accounts") || []);
+    const from = full || !last || [...cards].some(k => !known.has(k)) ? HISTORY_START : iso(new Date(Date.now() - 14 * 864e5));
     const ins = db.prepare("INSERT INTO tx(id,account_group_key,date,raw) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET account_group_key=excluded.account_group_key, date=excluded.date, raw=excluded.raw");
     let page = 1, pages = 1, n = 0;
     do {
@@ -143,7 +145,8 @@ async function sync({ full = false } = {}) {
     // Pending rows that have since settled come back with a new id; drop stale pending rows.
     db.prepare("DELETE FROM tx WHERE date < ? AND json_extract(raw,'$.is_pending') = 1").run(iso(new Date(Date.now() - 8 * 864e5)));
     kvSet("last_sync", new Date().toISOString());
-    console.log(`[sync] ${n} card transactions since ${from}`);
+    kvSet("synced_accounts", [...cards]);
+    console.log(`[sync] ${n} card/checking transactions since ${from}`);
   })().finally(() => { syncing = null; });
   return syncing;
 }
