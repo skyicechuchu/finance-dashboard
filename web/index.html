@@ -129,6 +129,7 @@ a{color:var(--accent)}
     </div>
     <div class="hstats">
       <div class="hstat"><div class="k">本周</div><div class="v num" id="hsWeek">—</div></div>
+      <div class="hstat"><div class="k">存款</div><div class="v num" id="hsCash">—</div></div>
       <div class="hstat"><div class="k">信用卡欠款</div><div class="v num" id="hsBal">—</div></div>
     </div>
   </header>
@@ -349,7 +350,7 @@ async function loadTx(from, fresh){
       const d = t.description || "";
       if (/maintenance fee waived/i.test(d)) { waived.add(t.account_group_key + t.transaction_date); continue; }
       if (!t.is_cash_outflow || Number(t.amount) >= 0) {
-        if (!NOT_SPEND.test(d)) income.push({id:t.transaction_id, date:t.transaction_date, from:cleanMerchant(d), amt:Number(t.amount), pending:!!t.is_pending});
+        if (!NOT_SPEND.test(d)) income.push({id:t.transaction_id, date:t.transaction_date, from:cleanMerchant(d), mask, amt:Number(t.amount), pending:!!t.is_pending});
         continue;
       }
       const to = cardPayee(d);
@@ -417,14 +418,20 @@ function renderHeader(){
   const month = inRange(S.tx, mStart, addDays(t,1));
   $("heroTotal").textContent = fmt(sum(month));
   $("hsWeek").textContent = fmt(sum(inRange(S.tx, monday(t), addDays(t,1))));
-  $("hsBal").textContent = fmt(S.accounts.filter(a=>a.type==="CreditCard").reduce((a,x)=>a+Number(x.balance&&x.balance.current||0),0));
+  const bal = a => Number(a.balance && a.balance.current || 0);
+  $("hsBal").textContent = fmt(S.accounts.filter(a=>a.type==="CreditCard").reduce((n,a)=>n+bal(a),0));
+  const banks = S.accounts.filter(a=>a.type!=="CreditCard");
+  $("hsCash").textContent = banks.length ? fmt(banks.reduce((n,a)=>n+bal(a),0)) : "—";
+  $("hsCash").title = banks.map(a=>`${cardName(a.account_mask)} ${a.account_mask}: ${fmt2(bal(a))}`).join("\n");
 }
 
 /* ---------- tab: spending ---------- */
 function renderChips(){
-  const masks = [...new Set(S.tx.map(t=>t.mask))];
+  // Every account gets a chip, even one with no spending (e.g. savings).
+  const masks = [...new Set([...S.accounts.map(a=>a.account_mask), ...S.tx.map(t=>t.mask)])].filter(Boolean);
   const order = Object.keys(CARD_NAMES);
-  masks.sort((a,b)=> (order.indexOf(a)+99)%99 - (order.indexOf(b)+99)%99);
+  const rank = m => ((S.accounts.find(a=>a.account_mask===m)||{}).type === "CreditCard" ? 0 : 100) + (order.includes(m) ? order.indexOf(m) : 50);
+  masks.sort((a,b)=> rank(a) - rank(b));
   $("cardChips").innerHTML = [["all","全部账户"],...masks.map(m=>[m, cardName(m)+" "+m])]
     .map(([k,l])=>`<button class="chip" data-card="${k}" aria-pressed="${S.card===k}">${k==="all"?ic("grid"):acctIcon(k)}${esc(l)}</button>`).join("");
   $("catChips").innerHTML = [["all","全部分类"],...CAT_KEYS.map(k=>[k,CAT_LABEL[k]])]
@@ -435,16 +442,29 @@ function filtered(){
   return S.tx.filter(t => (S.card==="all"||t.mask===S.card) && (S.cat==="all"||categorize(t)===S.cat) && (!q || t.desc.toLowerCase().includes(q)));
 }
 function renderTx(){
-  const rows = filtered();
-  if (!rows.length){ $("txList").innerHTML = '<div class="empty">没有符合条件的交易。</div>'; }
+  const spend = filtered();
+  // A checking/savings chip also lists that account's income (not counted in spending totals).
+  const acc = S.accounts.find(a=>a.account_mask===S.card);
+  const q = S.q.trim().toLowerCase();
+  const inc = acc && acc.type !== "CreditCard" && S.cat === "all"
+    ? S.income.filter(i => i.mask === S.card && (!q || i.from.toLowerCase().includes(q))).map(i => ({...i, desc:i.from, merchant:i.from, isIncome:true}))
+    : [];
+  const rows = [...spend, ...inc].sort((a,b)=> b.date.localeCompare(a.date) || b.amt-a.amt);
+  const head = acc && acc.type !== "CreditCard" ? `<div class="muted" style="margin-top:12px">${acctIcon(acc.account_mask)} 余额 <span class="num">${fmt2(Number(acc.balance&&acc.balance.current||0))}</span>${inc.length?" · 收入用绿色显示，不算消费":""}</div>` : "";
+  if (!rows.length){ $("txList").innerHTML = head + '<div class="empty">没有符合条件的交易。</div>'; }
   else {
     const groups = new Map();
     for (const t of rows.slice(0, 400)) { if (!groups.has(t.date)) groups.set(t.date, []); groups.get(t.date).push(t); }
-    let html = "";
+    let html = head;
     for (const [d, ts] of groups){
       const dt = parse(d);
-      html += `<div class="day"><div class="dayh"><span>${dt.getMonth()+1}月${dt.getDate()}日 周${WD[(dt.getDay()+6)%7]}</span><span class="num">${fmt2(sum(ts))}</span></div>`;
+      html += `<div class="day"><div class="dayh"><span>${dt.getMonth()+1}月${dt.getDate()}日 周${WD[(dt.getDay()+6)%7]}</span><span class="num">${(() => { const sp = ts.filter(t=>!t.isIncome), ic_ = ts.filter(t=>t.isIncome); return [sp.length ? fmt2(sum(sp)) : "", ic_.length ? "收入 +" + fmt2(sum(ic_)) : ""].filter(Boolean).join(" · "); })()}</span></div>`;
       for (const t of ts){
+        if (t.isIncome){
+          html += `<div class="tx refund"><div class="badge">${ic("income")}</div><div class="m" title="${esc(t.desc)}">${esc(t.merchant)}</div><div class="a num">+${fmt2(t.amt)}</div>
+          <div class="meta"><span>收入</span><span class="acct">${acctIcon(t.mask)}${esc(cardName(t.mask))} ${esc(t.mask)}</span>${t.pending?"<span>待入账</span>":""}</div></div>`;
+          continue;
+        }
         const c = categorize(t);
         const cls = t.amt < 0 ? "refund" : (t.amt >= 300 ? "big" : "");
         const catEl = S.editing === t.id
