@@ -3,6 +3,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    environment:
+      HOST: 0.0.0.0   # inside the container; the port below is still bound to 127.0.0.1
     volumes:
       - ./data:/data
     # 只绑定本机，外部通过 Tailscale 访问（见 README）

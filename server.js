@@ -15,6 +15,8 @@ import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8080);
+// Only this machine by default; Tailscale Serve / Docker port mapping forward to it.
+const HOST = process.env.HOST || "127.0.0.1";
 const PUBLIC_URL = (process.env.PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, "");
 const DATA_DIR = process.env.DATA_DIR || join(ROOT, "data");
 const ERA_MCP_URL = process.env.ERA_MCP_URL || "https://context.era.app/mcp";
@@ -59,7 +61,11 @@ class EraAuth {
       ...(ERA_SCOPES ? { scope: ERA_SCOPES } : {}) };
   }
   state() { const s = randomBytes(16).toString("hex"); kvSet("oauth_state", s); return s; }
-  clientInformation() { return kvGet("oauth_client"); }
+  clientInformation() {
+    // A client registered for another PUBLIC_URL can't complete login here; register again.
+    const c = kvGet("oauth_client");
+    return c && Array.isArray(c.redirect_uris) && !c.redirect_uris.includes(this.redirectUrl) ? undefined : c;
+  }
   saveClientInformation(c) { kvSet("oauth_client", c); }
   tokens() { return kvGet("oauth_tokens"); }
   saveTokens(t) { kvSet("oauth_tokens", t); }
@@ -235,4 +241,4 @@ const page = () => `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8
 app.get("/", (req, res) => res.type("html").send(page()));
 app.get("/selfhost-shim.js", (req, res) => res.sendFile(join(ROOT, "web/selfhost-shim.js")));
 
-app.listen(PORT, () => console.log(`finance dashboard on ${PUBLIC_URL} (port ${PORT})`));
+app.listen(PORT, HOST, () => console.log(`finance dashboard on ${PUBLIC_URL} (listening ${HOST}:${PORT})`));
