@@ -5,7 +5,7 @@
   "type": "module",
   "description": "个人信用卡 dashboard，自托管版（Era Context + SQLite）",
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning server.js"
+    "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning server.js"
   },
   "engines": { "node": ">=22.13" },
   "dependencies": {

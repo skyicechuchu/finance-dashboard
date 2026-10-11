@@ -22,6 +22,7 @@ const SYNC_HOURS = Number(process.env.SYNC_HOURS || 6);
 const HISTORY_START = process.env.HISTORY_START || "2026-04-01";
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+const ERA_SCOPES = process.env.ERA_SCOPES || "";  // optional: space-separated scopes to request from Era
 const MANUAL_REFRESH_MINUTES = 30;
 
 /* ---------- storage ---------- */
@@ -54,7 +55,8 @@ class EraAuth {
   get redirectUrl() { return `${PUBLIC_URL}/auth/callback`; }
   get clientMetadata() {
     return { client_name: "Finance Dashboard (self-hosted)", redirect_uris: [this.redirectUrl],
-      grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" };
+      grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none",
+      ...(ERA_SCOPES ? { scope: ERA_SCOPES } : {}) };
   }
   state() { const s = randomBytes(16).toString("hex"); kvSet("oauth_state", s); return s; }
   clientInformation() { return kvGet("oauth_client"); }
