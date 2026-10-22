@@ -130,19 +130,33 @@ async function sync({ full = false } = {}) {
     const last = kvGet("last_sync");
     // A newly tracked account (e.g. checking added later) needs its full history once.
     const known = new Set(kvGet("synced_accounts") || []);
-    const from = full || !last || [...cards].some(k => !known.has(k)) ? HISTORY_START : iso(new Date(Date.now() - 14 * 864e5));
+    // One full pass after upgrading clears duplicates already stored by older versions.
+    const reconciled = kvGet("reconciled_v1");
+    const from = full || !last || !reconciled || [...cards].some(k => !known.has(k)) ? HISTORY_START : iso(new Date(Date.now() - 14 * 864e5));
     const ins = db.prepare("INSERT INTO tx(id,account_group_key,date,raw) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET account_group_key=excluded.account_group_key, date=excluded.date, raw=excluded.raw");
-    let page = 1, pages = 1, n = 0;
+    let page = 1, pages = 1, n = 0, clamped = false;
+    const seen = [];
     do {
       const p = await callEra("list_transactions", { from_date: from, page_size: 100, page, include_pending: true });
+      if (p.history_window_applied) clamped = true;
       for (const t of p.transactions || []) {
         if (!cards.has(t.account_group_key)) continue;
         ins.run(t.transaction_id, t.account_group_key, t.transaction_date, JSON.stringify(t)); n++;
+        seen.push(t.transaction_id);
       }
       pages = (p.pagination && p.pagination.total_pages) || 1;
       page++;
     } while (page <= pages && page <= 60);
-    // Pending rows that have since settled come back with a new id; drop stale pending rows.
+    // Era is the source of truth: a stored row in the synced range that Era no longer returns
+    // (a pending row that settled under a new id, or a row Era re-keyed) would show twice. Only
+    // prune after reading every page, and not when the plan's history window hid older rows.
+    if (page > pages && !clamped) {
+      const gone = db.prepare("DELETE FROM tx WHERE date >= ? AND account_group_key IN (SELECT value FROM json_each(?)) AND id NOT IN (SELECT value FROM json_each(?))")
+        .run(from, JSON.stringify([...cards]), JSON.stringify(seen)).changes;
+      if (gone) console.log(`[sync] removed ${gone} rows Era no longer returns`);
+      if (from === HISTORY_START) kvSet("reconciled_v1", true);
+    }
+    // Pending rows older than Era's pending window are never returned again; drop them.
     db.prepare("DELETE FROM tx WHERE date < ? AND json_extract(raw,'$.is_pending') = 1").run(iso(new Date(Date.now() - 8 * 864e5)));
     kvSet("last_sync", new Date().toISOString());
     kvSet("synced_accounts", [...cards]);
